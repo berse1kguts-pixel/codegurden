@@ -1,0 +1,452 @@
+# 企业级敏捷开发全流程规范与个人效能工具指南
+
+> 本指南凝聚了在微服务、现代化前端以及 AI 智能体协作场景下的全套实战工程经验。无论是在具备成熟 CI/CD 平台的大型项目，还是在轻量级中小型项目，均可直接作为通用开发规范、团队协作守则或个人效能手册迁移复用。
+
+---
+
+## 目录
+1. [核心开发流程与六大黄金法则](#一核心开发流程与六大黄金法则)
+2. [个人本地工具链实战规范（AI 时代效能套件）](#二个人本地工具链实战规范ai-时代效能套件)
+3. [后端微服务工程规范与避坑铁律](#三后端微服务工程规范与避坑铁律)
+4. [前端交互与体验标准（美学与流式容错）](#四前端交互与体验标准美学与流式容错)
+5. [Git 分支治理与提交规范](#五git-分支治理与提交规范)
+6. [运维发布：有/无 Jenkins 场景的最佳实践](#六运维发布有无-jenkins-场景的最佳实践)
+7. [开箱即用通用脚本模板库（附录）](#七开箱即用通用脚本模板库附录)
+
+---
+
+## 一、核心开发流程与六大黄金法则
+
+```mermaid
+flowchart LR
+    A[需求与任务拆解] --> B[本地特性开发]
+    B --> C[主动单测/本地契约自检]
+    C --> D{用户确认提交?}
+    D -- 否 --> B
+    D -- 是 --> E[Git 审查与分支合并]
+    E --> F[CI/CD 或脚本自动化构建]
+    F --> G[精细化部署与健康探测]
+    G --> H[任务管理进度闭环与工时填报]
+```
+
+### 1. 提交与部署严格卡点（未确认前仅限本地）
+- **原则**：在本地开发完成且经过测试前，**严禁**自动执行 `git commit` / `git push`，**严禁**盲目触发远程流水线或生产部署。
+- **自检卡点**：核心业务逻辑、计算算法或缺陷修复时，必须主动编写并运行针对性的单元测试（JUnit 5 + Mockito / Vitest / Jest），本地自检通过、用户确认后再执行提交。
+
+### 2. 基础设施工具全托管自动化（过程透明可控）
+- 所有构建、打包、部署、发布测试与日志巡检必须通过标准化脚本或自动化工具（如 MCP）全托管闭环执行，杜绝开发者手动在 Web 控制台点按钮。
+- 执行运维与部署调用时，必须主动在终端或对话中显式输出工具名称、入参与意图，过程清晰透明。
+
+### 3. 数据库单一真相源（Single Source of Truth）
+- **严禁**新增零碎且无法追溯的历史升级增量补丁（如 `update_2026xxxx.sql`）。
+- **真相源架构**：全项目表结构与基础数据统一维护在**种子库脚本**（如 `app_template.sql` / `app_catalog.sql`），变更直接幂等（`IF NOT EXISTS` / `ON DUPLICATE KEY UPDATE`）更新种子库，并自动/脚本同步至各业务库与租户库。
+
+### 4. 精细化定向构建与部署（杜绝全量雪崩）
+- 微服务架构下，严禁每次部署都对全部服务无脑全量构建打包（`all`）。
+- 发布时必须精确指定变动模块（如 `SERVICES=mes-module-mcp,mes-module-ai`），大幅降低构建耗时，避免无关模块被迫重启造成服务抖动。
+
+### 5. 启动健康探测与自动回滚闭环
+- 部署脚本绝不能“执行了 `nohup java -jar` 就认为成功”。
+- 启动后必须进入健康探测循环（120s 端口检测或 `/actuator/health` 轮询）。超时未通过必须立即捕获并打印最新错误日志，同时触发自动回滚，杜绝假成功。
+
+### 6. 部署后自动联动项目任务闭环
+- 部署上线与健康自检完成后，必须立即联动项目管理工具（禅道/Jira/TAPD），自动流转关联任务状态（`wait` -> `doing` -> `done`），填报实际工时与交付记录，杜绝“代码已上线但进度脱节”。
+
+---
+
+## 二、个人本地工具链实战规范（AI 时代效能套件）
+
+高效的现代开发者善于将本地工具、安全环境与 AI 智能体结合，打造无缝流畅的工作流：
+
+### 1. 本地敏感凭证安全管理（Password Vault）
+- **原则**：任何生产/测试数据库密码、API Key、Git Token、禅道密码严禁以明文形式写入代码库、脚本或聊天记录。
+- **规范**：
+  - 使用本地加密保险库（`password-vault`）统一管理凭据。
+  - 需要使用凭证时，通过密钥管理接口或环境变量动态提取。
+  - 代码库中的 `application.yaml` 均采用占位符与默认值（如 `${DB_PASSWORD:}`）。
+
+### 2. 代码探索与调用拓扑分析（CodeGraph）
+- **原则**：在排查跨模块调用链、接口实现、继承关系或宏观架构时，优先使用符号图谱工具，而不是盲目全局文本 grep。
+- **规范**：
+  - 项目根目录建立代码图谱索引（`.codegraph/`）。
+  - 使用 `codegraph explore "<symbol or question>"` 或 IDE MCP 工具直接提取目标符号的调用方（callers）、被调方（callees）以及动态分发实现。
+  - 对于未索引的文件，再辅以局部精确正则搜索。
+
+### 3. 项目管理命令行化（ZenTao CLI / Jira CLI）
+- **原则**：告别繁重的 Web 界面切换，所有任务与 Bug 状态流转均在本地终端或由 Agent 驱动完成。
+- **规范**：
+  - 使用 `zentao-cli` 配置个人 profile 并关联当前迭代/执行（Execution）。
+  - **任务开始**：通过 `zentao_task` 查询个人待办并流转至进行中（`doing`）。
+  - **任务完成**：任务上线后，通过工具更新状态为完成（`done`），记录消耗工时与剩余工时（0），并附上提交的 Commit ID。
+
+### 4. 本地跨平台与 Git Hook 避坑规范
+- **Husky 与包管理器缺失**：在未安装对应 Node/pnpm 环境的终端或沙箱内执行 `git commit` 会因预检脚本不存在而报错。
+  - **标准解法**：`git -c core.hooksPath="" commit -m "..."` 绕过本地临时 hook，统一交由 CI 服务器代码门禁校验。
+- **网络隔离沙箱**：在沙箱环境中进行 `git fetch` / `git push` 时，务必开启提权或网络白名单（`BypassSandbox: true`）。
+
+---
+
+## 三、后端微服务工程规范与避坑铁律
+
+基于 Java / Spring Boot / Spring Cloud Alibaba 的实战避坑沉淀：
+
+### 1. Maven 打包与分类器规范
+- **独立微服务可执行 Jar 规范**：每个微服务模块的 `pom.xml` 中，`spring-boot-maven-plugin` 必须显式声明 `<classifier>exec</classifier>`：
+  ```xml
+  <plugin>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-maven-plugin</artifactId>
+      <version>${spring.boot.version}</version>
+      <configuration>
+          <classifier>exec</classifier>
+      </configuration>
+      <executions>
+          <execution>
+              <goals><goal>repackage</goal></goals>
+          </execution>
+      </executions>
+  </plugin>
+  ```
+- **资源过滤保证（Resource Filtering）**：模块中必须配置资源标签，确保 `application*.yaml` 和 `bootstrap*.yaml` 能被正确打包进 jar，避免空包：
+  ```xml
+  <resources>
+      <resource>
+          <directory>src/main/resources</directory>
+          <filtering>true</filtering>
+          <includes>
+              <include>**/application*.yaml</include>
+              <include>**/bootstrap*.yaml</include>
+          </includes>
+      </resource>
+  </resources>
+  ```
+
+### 2. `.gitignore` 规则避坑铁律
+- **痛点**：若全局 `.gitignore` 中粗暴配置了 `**/src/main/resources/application.yaml`，新建微服务的配置文件将**永远处于 Untracked 状态**，Jenkins 构建出的 jar 包因缺少配置直接闪退！
+- **防御准则**：
+  - 新增微服务模块时，立即使用 `git status` 确认 `application.yaml` 是否被版本控制。
+  - 如被忽略，必须显式 `git add -f <path-to-yaml>` 强制纳入版本库。
+
+### 3. Nacos / 配置中心启动防御性设计
+- **`import-check.enabled=false`**：Spring Cloud 2021+ 中，常因启动顺序报 `No spring.config.import property has been defined`。在 `application.yaml` 和 `bootstrap.yaml` 中务必增加：
+  ```yaml
+  spring:
+    cloud:
+      nacos:
+        config:
+          import-check:
+            enabled: false
+    config:
+      import:
+        - optional:nacos:common.yaml?refresh=true
+        - optional:nacos:${spring.application.name}.yaml?refresh=true
+  ```
+- **双重兜底**：必须保留 `bootstrap.yaml`，确保在 Spring Cloud 最早期的 Bootstrap 上下文中即可正确读取 Nacos 配置。
+
+---
+
+## 四、前端交互与体验标准（美学与流式容错）
+
+现代前端项目（Vue3 / React + TypeScript）的核心交互准则：
+
+### 1. 极致交互美学
+- **杜绝生硬界面**：杜绝原生单调的表格与弹窗，使用精细调配的色彩层级（如暗色调玻璃拟态、微边框阴影、现代字体如 Inter）。
+- **流畅的微动效**：按钮悬停状态、加载骨架屏（Skeleton）、打字机流式光标（`.art-streaming-cursor`）带有渐入渐出的呼吸动画。
+
+### 2. 流式 Markdown 容错渲染引擎规范
+在对接大模型 AI 或流式长文本时，必须具备前端流式容错能力：
+- **未闭合标签自闭合**：如果流式输出中间断开，未闭合的代码块（```）、未闭合的强调符（**）或未闭合的 HTML 标签，解析器必须在末尾自动补全闭合符号，杜绝页面结构闪烁跳跃。
+- **语法高亮与一键复制代码**：代码块必须集成 `highlight.js` / `prism`，顶部具备轻量语言标签和一键复制按钮，并在点击后提供 1.5s 绿色“已复制”即时反馈。
+
+---
+
+## 五、Git 分支治理与提交规范
+
+### 1. 分支流模型
+- `main` / `master`：生产稳定基线，受保护分支，严禁直接 push。
+- `dev`：主集成测试分支，远程自动流水线监听此分支。
+- `<feature>_<developer>`（如 `dev_wjh`）：个人特性/开发分支，开发完成后通过合并推送到 `dev`。
+
+### 2. 语义化提交（Conventional Commits）
+```
+<type>(<scope>): <subject>
+
+[可选 body]
+[可选 footer]
+```
+- `feat`: 新功能（新 API、新界面组件）
+- `fix`: 缺陷修复（业务代码逻辑、打包配置、配置文件修正）
+- `test`: 单元测试与契约测试
+- `refactor`: 代码重构（不影响功能的结构调整）
+- `perf`: 性能调优（SQL 优化、并发处理、缓存注入）
+
+---
+
+## 六、运维发布：有/无 Jenkins 场景的最佳实践
+
+不同团队与基础设施下的部署方案选型：
+
+```mermaid
+graph TD
+    Deploy[代码通过测试准备发布] --> HasJenkins{是否有 Jenkins?}
+    HasJenkins -- 有 --> J1[Jenkinsfile 参数化流水线]
+    J1 --> J2[MCP 工具 / Webhook 全自动触发]
+    J2 --> Check[健康探测与项目任务闭环]
+    
+    HasJenkins -- 无 --> InfraType{服务器架构形态}
+    InfraType -- 单机/裸机 Linux --> A1[本地一键部署脚本 deploy-remote.sh]
+    A1 --> A2[服务器 Systemd 守护进程]
+    
+    InfraType -- 容器化服务器 --> B1[Docker Compose 微服务编排]
+    B1 --> B2[docker compose up -d --no-deps service]
+    
+    A2 --> Check
+    B2 --> Check
+```
+
+### 1. 有 Jenkins 场景（大型微服务集群首选）
+- 通过标准化 `Jenkinsfile` 参数化构建。
+- 必须支持参数：`SERVICES`（指定模块）、`ACTION`（`deploy_restart` / `restart` / `rollback`）、`BRANCH`（指定分支）。
+- 全流程由 Agent 通过 `jenkins` MCP 闭环触发与巡检。
+
+### 2. 无 Jenkins 场景 A：本地一键远程发布脚本（轻量小团队首选）
+- **核心逻辑**：在本地完成 Maven 打包，通过 `rsync` 快速同步 jar 包至服务器，并通过 SSH 执行服务器上的轻量启停脚本。
+- **优势**：服务器无需搭建复杂的 CI 环境与消耗大内存的 Java 编译环境。
+
+### 3. 无 Jenkins 场景 B：Linux 原生 `systemd` 托管
+- 不写脆弱的后台 `nohup`，全部微服务由 Linux `systemd` 接管。
+- 天然具备崩溃自启、开机自启、日志自动轮转（`journalctl`）与标准控制（`systemctl restart <service>`）。
+
+### 4. 无 Jenkins 场景 C：Docker Compose 容器化
+- 使用 `docker-compose.yml` 声明端口、环境变量与健康检查。
+- 定向发布仅需一行：`docker compose up -d --no-deps <service>`。
+
+---
+
+## 七、开箱即用通用脚本模板库（附录）
+
+### 模板 1：本地一键远程发布脚本（`deploy-remote.sh`）
+> 适用无 Jenkins 环境，在本地开发机执行即可直推服务器。
+
+```bash
+#!/usr/bin/env bash
+# ==============================================================================
+# deploy-remote.sh: 本地一键远程打包并部署到 Linux 服务器
+# 用法: ./deploy-remote.sh <service_name>
+# 示例: ./deploy-remote.sh mes-module-mcp
+# ==============================================================================
+set -e
+
+SERVICE="${1:-}"
+SERVER_USER="deploy"
+SERVER_IP="192.168.1.100"
+REMOTE_DIR="/data/app/backend"
+
+if [ -z "$SERVICE" ]; then
+    echo "❌ 错误: 请指定微服务名，例如: ./deploy-remote.sh mes-module-mcp"
+    exit 1
+fi
+
+echo "🚀 [1/4] 本地构建模块: $SERVICE ..."
+mvn clean package -pl "$SERVICE" -am -DskipTests
+
+JAR_PATH=$(find "$SERVICE/target" -name "*-exec.jar" | head -n 1)
+if [ -z "$JAR_PATH" ]; then
+    echo "❌ 错误: 未能在 $SERVICE/target 找到 *-exec.jar"
+    exit 1
+fi
+
+echo "📦 [2/4] 备份服务器旧版本并同步新 Jar ..."
+ssh "${SERVER_USER}@${SERVER_IP}" "mkdir -p ${REMOTE_DIR}/backup && cp -f ${REMOTE_DIR}/${SERVICE}-exec.jar ${REMOTE_DIR}/backup/${SERVICE}-\$(date +%Y%m%d%H%M).jar 2>/dev/null || true"
+rsync -avz --progress "$JAR_PATH" "${SERVER_USER}@${SERVER_IP}:${REMOTE_DIR}/${SERVICE}-exec.jar"
+
+echo "🔄 [3/4] 触发远程服务优雅重启与端口探测 ..."
+ssh "${SERVER_USER}@${SERVER_IP}" "bash ${REMOTE_DIR}/start.sh restart ${SERVICE}"
+
+echo "🎉 [4/4] 服务 $SERVICE 部署成功并已通过健康自检！"
+```
+
+---
+
+### 模板 2：生产级微服务启停守护脚本（`start.sh`）
+> 适用 Linux 服务器端，支持 PID 防复用校验、端口防占用自动清理与启动健康探测。
+
+```bash
+#!/usr/bin/env bash
+# ==============================================================================
+# start.sh: 生产级微服务启停与健康检测脚本
+# 用法: bash start.sh <start|stop|restart|status> <service-name>
+# ==============================================================================
+set -u
+
+APP_HOME="/data/app/backend"
+LOGS_DIR="$APP_HOME/logs"
+ACTION="${1:-}"
+SERVICE="${2:-}"
+PORT_MAP_mes_module_mcp="18818"
+PORT_MAP_mes_module_ai="18092"
+
+mkdir -p "$LOGS_DIR"
+
+port_of() {
+    case "$1" in
+        mes-module-mcp) echo "18818" ;;
+        mes-module-ai)  echo "18092" ;;
+        *)              echo "" ;;
+    esac
+}
+
+pid_file() { echo "$APP_HOME/${SERVICE}.pid"; }
+
+get_pid() {
+    local f; f=$(pid_file)
+    if [ -f "$f" ]; then
+        local pid; pid=$(tr -dc '0-9' < "$f")
+        if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
+            echo "$pid" && return 0
+        fi
+    fi
+    return 1
+}
+
+stop_service() {
+    local pid; pid=$(get_pid) || true
+    local port; port=$(port_of "$SERVICE")
+    if [ -n "$pid" ]; then
+        echo "■ 停止服务: $SERVICE (PID: $pid) ..."
+        kill "$pid" 2>/dev/null || true
+        for i in $(seq 1 15); do
+            [ -d "/proc/$pid" ] || break
+            sleep 1
+        done
+        [ -d "/proc/$pid" ] && kill -9 "$pid" 2>/dev/null || true
+    fi
+    # 端口清理兜底
+    if [ -n "$port" ] && command -v fuser >/dev/null 2>&1; then
+        fuser -k -n tcp "$port" 2>/dev/null || true
+    fi
+    rm -f "$(pid_file)"
+    echo "✔ $SERVICE 已停止"
+}
+
+start_service() {
+    local jar="$APP_HOME/${SERVICE}-exec.jar"
+    local port; port=$(port_of "$SERVICE")
+    if [ ! -f "$jar" ]; then
+        echo "❌ 错误: 未找到 $jar" && exit 1
+    fi
+    
+    echo "▶ 启动服务: $SERVICE ..."
+    cd "$APP_HOME"
+    nohup java -Xms512m -Xmx1g -XX:+UseG1GC -jar "$jar" > "$LOGS_DIR/${SERVICE}.log" 2>&1 &
+    local new_pid=$!
+    echo "$new_pid" > "$(pid_file)"
+    
+    # 端口健康探测（最长等待 120 秒）
+    echo ">> 正在探测端口 ${port} 监听状态 ..."
+    local ok=false
+    for i in $(seq 1 120); do
+        if ! kill -0 "$new_pid" 2>/dev/null; then
+            echo "❌ $SERVICE 启动闪退，最近日志:"
+            tail -n 30 "$LOGS_DIR/${SERVICE}.log"
+            exit 2
+        fi
+        if [ -z "$port" ] || ss -tln | grep -q ":${port} "; then
+            ok=true; break
+        fi
+        sleep 1
+    done
+    
+    if [ "$ok" = "true" ]; then
+        echo "✔ $SERVICE 启动成功！PID=$new_pid, 端口=${port:-无/内嵌}"
+    else
+        echo "❌ 端口 ${port} 探测超时！最新日志:"
+        tail -n 30 "$LOGS_DIR/${SERVICE}.log"
+        exit 3
+    fi
+}
+
+case "$ACTION" in
+    start)   start_service ;;
+    stop)    stop_service ;;
+    restart) stop_service && sleep 2 && start_service ;;
+    status)
+        if pid=$(get_pid); then
+            echo "● $SERVICE 正在运行 (PID: $pid)"
+        else
+            echo "○ $SERVICE 未运行"
+        fi
+        ;;
+    *) echo "用法: $0 <start|stop|restart|status> <service-name>" && exit 1 ;;
+esac
+```
+
+---
+
+### 模板 3：Systemd 服务单元（`service.template`）
+> 适用纯 Linux 宿主机原生守护，保存至 `/etc/systemd/system/<service-name>.service`。
+
+```ini
+[Unit]
+Description=Backend Microservice - %I
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/data/app/backend
+ExecStart=/usr/bin/java -Xms512m -Xmx1g -XX:+UseG1GC -jar /data/app/backend/%I-exec.jar
+Restart=on-failure
+RestartSec=10s
+StandardOutput=append:/data/app/backend/logs/%I.log
+StandardError=append:/data/app/backend/logs/%I.error.log
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+```
+- **管理命令**：
+  ```bash
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now mes-module-mcp   # 开机自启并立即运行
+  sudo systemctl restart mes-module-mcp      # 重启服务
+  sudo systemctl status mes-module-mcp       # 查看状态
+  journalctl -u mes-module-mcp -f            # 查看实时系统日志
+  ```
+
+---
+
+### 模板 4：轻量 Docker Compose 容器化编排（`docker-compose.yml`）
+> 适用容器化服务器，零安装复杂环境依赖。
+
+```yaml
+version: '3.8'
+
+services:
+  mes-module-mcp:
+    image: eclipse-temurin:17-jre-jammy
+    container_name: mes-module-mcp
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./mes-module-mcp-exec.jar:/app/app.jar
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+      - SPRING_PROFILES_ACTIVE=prod
+      - NACOS_SERVER_ADDR=192.168.1.100:8848
+    ports:
+      - "18818:18818"
+    command: ["java", "-Xms512m", "-Xmx1g", "-jar", "app.jar"]
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 18818 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+```
+- **单模块定向热更新命令**：
+  ```bash
+  docker compose up -d --no-deps mes-module-mcp
+  ```
